@@ -31,3 +31,7 @@ Thumbs.db
 # Logs
 *.log
 ui_tree_*.txt
+/.android-user-home
+/.tmp-xapk
+/.tmp-tools
+/.gradle-user-home
