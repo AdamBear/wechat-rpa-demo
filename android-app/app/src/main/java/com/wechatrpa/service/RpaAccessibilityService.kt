@@ -60,7 +60,7 @@ class RpaAccessibilityService : AccessibilityService() {
         // 声明需访问微信、企微的窗口，部分机型/Android 14+ 不声明则拿不到目标应用界面
         serviceInfo?.packageNames = arrayOf("com.tencent.mm", "com.tencent.wework")
         // 隐藏软键盘，防止遮挡控件
-        softKeyboardController.showMode = SHOW_MODE_HIDDEN
+        softKeyboardController.showMode = SHOW_MODE_AUTO
         Log.i(TAG, "无障碍服务已连接，RPA引擎就绪 (packageNames: 微信+企微)")
     }
 
@@ -70,7 +70,10 @@ class RpaAccessibilityService : AccessibilityService() {
         val cls = event.className?.toString() ?: ""
 
         // 记录当前前台页面信息（仅记录Activity级别的切换）
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        if (
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+        ) {
             currentPackage = pkg
             if (cls.contains(".")) {
                 currentClassName = cls
