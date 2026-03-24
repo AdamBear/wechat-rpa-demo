@@ -16,7 +16,7 @@ DEVICES = {
         "name": "设备1-企业微信",
         "api_base": "http://127.0.0.1:9527",
         "target_app": "wework",
-        "adb_serial": "9c09df98",
+        "adb_serial": "d1c488854f9e",
     },
 }
 

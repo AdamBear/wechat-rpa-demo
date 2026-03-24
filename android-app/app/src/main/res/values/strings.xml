@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">WeChat RPA</string>
-    <string name="accessibility_service_description">
-        WeChat RPA 无障碍服务。
-        本服务通过Android官方无障碍框架，自动化操作企业微信/微信客户端，
-        实现收发消息、群管理等功能。
-        本服务不会收集或上传任何个人隐私数据。
-    </string>
+    <string name="accessibility_service_description">WeChat RPA 无障碍服务，用于执行微信和企业微信自动化操作。</string>
+
+    <string name="main_title">WeChat RPA 控制台</string>
+    <string name="status_preparing">准备中...</string>
+
+    <string name="accessibility_checking">无障碍服务：检查中...</string>
+    <string name="accessibility_enabled">无障碍服务：已开启</string>
+    <string name="accessibility_disabled">无障碍服务：未开启</string>
+    <string name="open_accessibility_settings">打开无障碍设置</string>
+
+    <string name="http_server_starting">HTTP 服务：启动中...</string>
+    <string name="http_server_running">HTTP 服务：运行中（端口 9527）</string>
+    <string name="http_server_stopped">HTTP 服务：未启动</string>
+    <string name="restart_http_server">重启 HTTP 服务</string>
+    <string name="start_http_server">启动 HTTP 服务</string>
+    <string name="stop_http_server">停止 HTTP 服务</string>
+
+    <string name="current_package">当前前台应用：%1$s</string>
+
+    <string name="status_ready">状态：已就绪，可通过本地 API 调用</string>
+    <string name="status_wait_accessibility">状态：HTTP 服务已启动，等待无障碍服务连接</string>
+    <string name="status_wait_services">状态：等待服务启动</string>
+
+    <string name="usage_text">\n使用说明：\n1. 请先为本应用开启无障碍服务。\n2. 保持本应用在设备中可用，并确保本地 HTTP 服务已启动。\n3. 通过 adb forward 或宿主机服务调用 9527 端口上的设备 API。\n</string>
 </resources>

@@ -127,7 +127,7 @@ object NodeHelper {
             if (node != null) return node
 
             val scrollable = findScrollables().firstOrNull() ?: break
-            service?.scrollForward(scrollable) ?: break
+            if (service?.scrollForward(scrollable) != true) break
             Thread.sleep(800)
         }
         return null
@@ -165,17 +165,25 @@ object NodeHelper {
     }
 
     fun isInChatPage(): Boolean {
-        return findByContainsText("发送").isNotEmpty() || findEditTexts().isNotEmpty()
+        return findByContainsText("\u53d1\u9001").isNotEmpty() || findEditTexts().isNotEmpty()
     }
 
     fun isInMainPage(target: AppTarget = AppTarget.WEWORK): Boolean {
         return when (target) {
             AppTarget.WECHAT ->
-                findByExactText("通讯录") != null &&
-                    (findByExactText("发现") != null || findByExactText("我") != null)
+                findByExactText("\u901a\u8baf\u5f55") != null &&
+                    (findByExactText("\u6d88\u606f") != null || findByExactText("\u6211") != null)
 
             AppTarget.WEWORK ->
-                countExactTexts(listOf("消息", "邮件", "文档", "工作台", "通讯录")) >= 3
+                countExactTexts(
+                    listOf(
+                        "\u6d88\u606f",
+                        "\u90ae\u4ef6",
+                        "\u6587\u6863",
+                        "\u5de5\u4f5c\u53f0",
+                        "\u901a\u8baf\u5f55"
+                    )
+                ) >= 3
         }
     }
 }

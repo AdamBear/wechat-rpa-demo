@@ -1,102 +1,81 @@
 package com.wechatrpa.service
 
 import android.util.Log
-import com.wechatrpa.model.AppTarget
 import com.wechatrpa.model.TaskRequest
 import com.wechatrpa.model.TaskResult
 import com.wechatrpa.model.TaskType
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * 任务控制器
- *
- * 负责接收来自HTTP API的任务请求，放入队列中顺序执行。
- * 采用单线程串行执行模型，确保UI操作不会互相冲突。
- *
- * 架构角色：
- *   HttpServer --> TaskController --> WeworkOperator --> RpaAccessibilityService
+ * Serial task controller for device-side HTTP API requests.
  */
 class TaskController {
 
     companion object {
         private const val TAG = "TaskController"
+        private const val TASK_TIMEOUT_SECONDS = 45L
     }
 
     private val taskQueue = ConcurrentLinkedQueue<TaskRequest>()
     private val isRunning = AtomicBoolean(false)
     private val weworkOperator = WeworkOperator()
-    private val resultMap = mutableMapOf<String, TaskResult>()
+    private val resultMap = linkedMapOf<String, TaskResult>()
 
-    /**
-     * 启动任务执行循环
-     */
     fun start() {
         if (isRunning.getAndSet(true)) {
-            Log.w(TAG, "任务控制器已在运行中")
+            Log.w(TAG, "Task controller already started")
             return
         }
-        Log.i(TAG, "任务控制器启动")
+        Log.i(TAG, "Task controller started")
         thread(name = "TaskExecutor", isDaemon = true) {
             while (isRunning.get()) {
                 val task = taskQueue.poll()
                 if (task != null) {
                     executeTask(task)
                 } else {
-                    Thread.sleep(200) // 队列为空时短暂休眠
+                    Thread.sleep(200)
                 }
             }
-            Log.i(TAG, "任务控制器已停止")
+            Log.i(TAG, "Task controller stopped")
         }
     }
 
-    /**
-     * 停止任务执行
-     */
     fun stop() {
         isRunning.set(false)
-        Log.i(TAG, "任务控制器停止中...")
+        Log.i(TAG, "Task controller stopping...")
     }
 
-    /**
-     * 提交任务到队列
-     */
     fun submitTask(task: TaskRequest): String {
         taskQueue.offer(task)
-        Log.i(TAG, "任务已入队: ${task.taskId} (${task.taskType}), 队列大小: ${taskQueue.size}")
+        Log.i(TAG, "Task queued: ${task.taskId} (${task.taskType}), queueSize=${taskQueue.size}")
         return task.taskId
     }
 
-    /**
-     * 查询任务结果
-     */
     fun getResult(taskId: String): TaskResult? {
         return resultMap[taskId]
     }
 
-    /**
-     * 获取队列大小
-     */
     fun getQueueSize(): Int = taskQueue.size
 
-    /**
-     * 执行单个任务
-     */
     private fun executeTask(task: TaskRequest) {
-        Log.i(TAG, "开始执行任务: ${task.taskId} (${task.taskType})")
+        Log.i(TAG, "Task started: ${task.taskId} (${task.taskType})")
         val startTime = System.currentTimeMillis()
+        val executor = Executors.newSingleThreadExecutor()
 
-        val result = try {
+        val future = executor.submit<TaskResult> {
             when (task.taskType) {
                 TaskType.SEND_MESSAGE -> {
                     val contact = task.getString("contact")
                     val message = task.getString("message")
                     if (contact.isBlank() || message.isBlank()) {
-                        TaskResult(task.taskId, false, "缺少参数: contact 或 message")
+                        TaskResult(task.taskId, false, "Missing required params: contact/message")
                     } else {
-                        val r = weworkOperator.sendMessage(contact, message, task.target)
-                        r.copy(taskId = task.taskId)
+                        weworkOperator.sendMessage(contact, message, task.target).copy(taskId = task.taskId)
                     }
                 }
 
@@ -104,10 +83,9 @@ class TaskController {
                     val contact = task.getString("contact")
                     val count = task.getInt("count", 10)
                     if (contact.isBlank()) {
-                        TaskResult(task.taskId, false, "缺少参数: contact")
+                        TaskResult(task.taskId, false, "Missing required param: contact")
                     } else {
-                        val r = weworkOperator.readMessagesFrom(contact, count, task.target)
-                        r.copy(taskId = task.taskId)
+                        weworkOperator.readMessagesFrom(contact, count, task.target).copy(taskId = task.taskId)
                     }
                 }
 
@@ -115,10 +93,9 @@ class TaskController {
                     val groupName = task.getString("group_name")
                     val members = task.getStringList("members")
                     if (members.isEmpty()) {
-                        TaskResult(task.taskId, false, "缺少参数: members")
+                        TaskResult(task.taskId, false, "Missing required param: members")
                     } else {
-                        val r = weworkOperator.createGroup(groupName, members, task.target)
-                        r.copy(taskId = task.taskId)
+                        weworkOperator.createGroup(groupName, members, task.target).copy(taskId = task.taskId)
                     }
                 }
 
@@ -126,10 +103,9 @@ class TaskController {
                     val groupName = task.getString("group_name")
                     val members = task.getStringList("members")
                     if (groupName.isBlank() || members.isEmpty()) {
-                        TaskResult(task.taskId, false, "缺少参数: group_name 或 members")
+                        TaskResult(task.taskId, false, "Missing required params: group_name/members")
                     } else {
-                        val r = weworkOperator.inviteToGroup(groupName, members, task.target)
-                        r.copy(taskId = task.taskId)
+                        weworkOperator.inviteToGroup(groupName, members, task.target).copy(taskId = task.taskId)
                     }
                 }
 
@@ -137,50 +113,56 @@ class TaskController {
                     val groupName = task.getString("group_name")
                     val members = task.getStringList("members")
                     if (groupName.isBlank() || members.isEmpty()) {
-                        TaskResult(task.taskId, false, "缺少参数: group_name 或 members")
+                        TaskResult(task.taskId, false, "Missing required params: group_name/members")
                     } else {
-                        val r = weworkOperator.removeFromGroup(groupName, members, task.target)
-                        r.copy(taskId = task.taskId)
+                        weworkOperator.removeFromGroup(groupName, members, task.target).copy(taskId = task.taskId)
                     }
                 }
 
                 TaskType.GET_GROUP_MEMBERS -> {
                     val groupName = task.getString("group_name")
                     if (groupName.isBlank()) {
-                        TaskResult(task.taskId, false, "缺少参数: group_name")
+                        TaskResult(task.taskId, false, "Missing required param: group_name")
                     } else {
-                        val r = weworkOperator.getGroupMembers(groupName, task.target)
-                        r.copy(taskId = task.taskId)
+                        weworkOperator.getGroupMembers(groupName, task.target).copy(taskId = task.taskId)
                     }
                 }
 
                 TaskType.GET_CONTACT_LIST -> {
-                    val r = weworkOperator.getContactList(task.target)
-                    r.copy(taskId = task.taskId)
+                    weworkOperator.getContactList(task.target).copy(taskId = task.taskId)
                 }
 
                 TaskType.DUMP_UI_TREE -> {
                     val tree = weworkOperator.dumpUiTree()
-                    TaskResult(task.taskId, true, "控件树导出成功", tree)
+                    TaskResult(task.taskId, true, "UI tree dumped", tree)
                 }
 
                 else -> {
-                    TaskResult(task.taskId, false, "不支持的任务类型: ${task.taskType}")
+                    TaskResult(task.taskId, false, "Unsupported task type: ${task.taskType}")
                 }
             }
+        }
+
+        val result = try {
+            future.get(TASK_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (e: TimeoutException) {
+            future.cancel(true)
+            Log.e(TAG, "Task timed out: ${task.taskId} timeout=${TASK_TIMEOUT_SECONDS}s")
+            TaskResult(task.taskId, false, "Task timed out after ${TASK_TIMEOUT_SECONDS}s")
         } catch (e: Exception) {
-            Log.e(TAG, "任务执行异常: ${e.message}", e)
-            TaskResult(task.taskId, false, "执行异常: ${e.message}")
+            Log.e(TAG, "Task execution failed: ${e.message}", e)
+            TaskResult(task.taskId, false, "Task execution failed: ${e.message}")
+        } finally {
+            executor.shutdownNow()
         }
 
         val elapsed = System.currentTimeMillis() - startTime
-        Log.i(TAG, "任务完成: ${task.taskId} (${result.success}) 耗时: ${elapsed}ms")
+        Log.i(TAG, "Task finished: ${task.taskId} success=${result.success} elapsed=${elapsed}ms")
 
-        // 保存结果（最多保留1000条）
         resultMap[task.taskId] = result
-        if (resultMap.size > 1000) {
-            val oldest = resultMap.keys.firstOrNull()
-            if (oldest != null) resultMap.remove(oldest)
+        while (resultMap.size > 1000) {
+            val oldest = resultMap.keys.firstOrNull() ?: break
+            resultMap.remove(oldest)
         }
     }
 }

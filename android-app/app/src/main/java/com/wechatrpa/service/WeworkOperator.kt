@@ -85,26 +85,45 @@ class WeworkOperator {
     fun launchWework(): Boolean = launchApp(AppTarget.WEWORK)
 
     fun goToMainPage(target: AppTarget = AppTarget.WEWORK): Boolean {
+        Log.i(TAG, "goToMainPage: start target=${target.packageName}")
         for (i in 0..5) {
             if (NodeHelper.isInMainPage(target)) {
-                Log.i(TAG, "already in main page")
+                Log.i(TAG, "goToMainPage: already in main page")
                 return true
             }
+            Log.i(TAG, "goToMainPage: pressBack round=${i + 1}")
             service?.pressBack()
             Thread.sleep(DELAY_SHORT)
         }
 
-        if (!launchApp(target)) return false
+        if (!launchApp(target)) {
+            Log.e(TAG, "goToMainPage: launchApp failed")
+            return false
+        }
 
         if (target == AppTarget.WECHAT) {
             for (i in 0..10) {
                 Thread.sleep(500)
-                if (NodeHelper.isInMainPage(target)) return true
+                val inMain = NodeHelper.isInMainPage(target)
+                Log.i(TAG, "goToMainPage: wechat wait round=${i + 1} inMain=$inMain")
+                if (inMain) return true
             }
             Thread.sleep(2000)
+        } else {
+            for (i in 0..12) {
+                val inMain = NodeHelper.isInMainPage(target)
+                Log.i(
+                    TAG,
+                    "goToMainPage: wework wait round=${i + 1} inMain=$inMain currentPackage=${service?.currentPackage}"
+                )
+                if (inMain) return true
+                Thread.sleep(1000)
+            }
         }
 
-        return NodeHelper.isInMainPage(target)
+        val result = NodeHelper.isInMainPage(target)
+        Log.i(TAG, "goToMainPage: finalResult=$result currentPackage=${service?.currentPackage}")
+        return result
     }
 
     private fun isInWeworkMainShell(): Boolean {
@@ -120,26 +139,39 @@ class WeworkOperator {
     }
 
     private fun enterWeworkContactsPage(): Boolean {
-        if (isInWeworkContactsPage()) return true
+        Log.i(TAG, "enterWeworkContactsPage: start")
+        if (isInWeworkContactsPage()) {
+            Log.i(TAG, "enterWeworkContactsPage: already in contacts page")
+            return true
+        }
 
         val clickAttempts = listOf(
-            { NodeHelper.clickText("\u901a\u8baf\u5f55", preferBottomMost = true) },
-            { NodeHelper.clickAnyText(listOf("\u901a\u8baf\u5f55", "\u8054\u7cfb\u4eba"), preferBottomMost = true) },
-            { NodeHelper.clickId(WeworkIds.TAB_CONTACTS) },
-            { service?.waitAndClickText("\u901a\u8baf\u5f55", 3000) == true }
+            "bottom-tab-text" to { NodeHelper.clickText("\u901a\u8baf\u5f55", preferBottomMost = true) },
+            "bottom-tab-any-text" to {
+                NodeHelper.clickAnyText(listOf("\u901a\u8baf\u5f55", "\u8054\u7cfb\u4eba"), preferBottomMost = true)
+            },
+            "bottom-tab-id" to { NodeHelper.clickId(WeworkIds.TAB_CONTACTS) },
+            "wait-and-click-text" to { service?.waitAndClickText("\u901a\u8baf\u5f55", 3000) == true }
         )
 
-        repeat(4) {
-            for (attempt in clickAttempts) {
-                if (attempt()) {
+        repeat(4) { round ->
+            Log.i(TAG, "enterWeworkContactsPage: round=${round + 1}")
+            for ((name, attempt) in clickAttempts) {
+                val clicked = attempt()
+                Log.i(TAG, "enterWeworkContactsPage: attempt=$name clicked=$clicked")
+                if (clicked) {
                     Thread.sleep(1500)
-                    if (isInWeworkContactsPage()) return true
+                    val inContacts = isInWeworkContactsPage()
+                    Log.i(TAG, "enterWeworkContactsPage: attempt=$name inContacts=$inContacts")
+                    if (inContacts) return true
                 }
             }
             Thread.sleep(500)
         }
 
-        return isInWeworkContactsPage()
+        val result = isInWeworkContactsPage()
+        Log.i(TAG, "enterWeworkContactsPage: finalResult=$result")
+        return result
     }
 
     private fun openWeworkSearch(): Boolean {
@@ -183,6 +215,43 @@ class WeworkOperator {
         return false
     }
 
+    private fun findContactInCurrentList(contactName: String, maxScrolls: Int = 5): Boolean {
+        Log.i(TAG, "findContactInCurrentList: start contact=$contactName maxScrolls=$maxScrolls")
+        for (i in 0..maxScrolls) {
+            Log.i(TAG, "findContactInCurrentList: round=${i + 1}")
+            val exactNode = NodeHelper.findByExactText(contactName)
+            if (exactNode != null) {
+                Log.i(TAG, "findContactInCurrentList: exact match found")
+                val clicked = service?.clickNode(exactNode) == true
+                Log.i(TAG, "findContactInCurrentList: exact match clicked=$clicked")
+                Thread.sleep(DELAY_PAGE_LOAD)
+                return true
+            }
+
+            val fuzzyNode = NodeHelper.findByContainsText(contactName)
+                .firstOrNull { it.text?.toString()?.contains(contactName) == true }
+            if (fuzzyNode != null) {
+                Log.i(TAG, "findContactInCurrentList: fuzzy match found text=${fuzzyNode.text}")
+                val clicked = service?.clickNode(fuzzyNode) == true
+                Log.i(TAG, "findContactInCurrentList: fuzzy match clicked=$clicked")
+                Thread.sleep(DELAY_PAGE_LOAD)
+                return true
+            }
+
+            val scrollable = NodeHelper.findScrollables().firstOrNull()
+            if (scrollable == null) {
+                Log.w(TAG, "findContactInCurrentList: no scrollable node, stop searching")
+                break
+            }
+            val scrolled = service?.scrollForward(scrollable) == true
+            Log.i(TAG, "findContactInCurrentList: scrollForward=$scrolled")
+            Thread.sleep(800)
+        }
+
+        Log.w(TAG, "findContactInCurrentList: contact not found contact=$contactName")
+        return false
+    }
+
     private fun isChatWindowReady(): Boolean {
         return NodeHelper.findEditTexts().isNotEmpty() ||
             NodeHelper.pageContainsText("\u53d1\u9001") ||
@@ -190,29 +259,47 @@ class WeworkOperator {
     }
 
     private fun enterChatFromContactProfile(): Boolean {
-        if (isChatWindowReady()) return true
+        Log.i(TAG, "enterChatFromContactProfile: start")
+        if (isChatWindowReady()) {
+            Log.i(TAG, "enterChatFromContactProfile: chat already ready")
+            return true
+        }
 
         val attempts = listOf(
-            { NodeHelper.clickAnyText(listOf("\u53d1\u6d88\u606f", "\u53d1\u9001\u6d88\u606f", "\u6d88\u606f"), exact = true) },
-            { NodeHelper.clickAnyText(listOf("\u53d1\u6d88\u606f", "\u53d1\u9001\u6d88\u606f", "\u6d88\u606f"), exact = false) }
+            "exact-message-entry" to {
+                NodeHelper.clickAnyText(listOf("\u53d1\u6d88\u606f", "\u53d1\u9001\u6d88\u606f", "\u6d88\u606f"), exact = true)
+            },
+            "fuzzy-message-entry" to {
+                NodeHelper.clickAnyText(listOf("\u53d1\u6d88\u606f", "\u53d1\u9001\u6d88\u606f", "\u6d88\u606f"), exact = false)
+            }
         )
 
-        repeat(3) {
-            for (attempt in attempts) {
-                if (attempt()) {
+        repeat(3) { round ->
+            Log.i(TAG, "enterChatFromContactProfile: round=${round + 1}")
+            for ((name, attempt) in attempts) {
+                val clicked = attempt()
+                Log.i(TAG, "enterChatFromContactProfile: attempt=$name clicked=$clicked")
+                if (clicked) {
                     Thread.sleep(DELAY_PAGE_LOAD)
-                    if (isChatWindowReady()) return true
+                    val ready = isChatWindowReady()
+                    Log.i(TAG, "enterChatFromContactProfile: attempt=$name ready=$ready")
+                    if (ready) return true
                 }
             }
             Thread.sleep(DELAY_SHORT)
         }
 
-        return isChatWindowReady()
+        val result = isChatWindowReady()
+        Log.i(TAG, "enterChatFromContactProfile: finalResult=$result")
+        return result
     }
 
     fun openChat(contactName: String, target: AppTarget = AppTarget.WEWORK): Boolean {
         Log.i(TAG, "openChat: $contactName (${target.packageName})")
-        if (!goToMainPage(target)) return false
+        if (!goToMainPage(target)) {
+            Log.e(TAG, "openChat failed: goToMainPage returned false")
+            return false
+        }
         Thread.sleep(DELAY_SHORT)
 
         if (target == AppTarget.WECHAT) {
@@ -235,35 +322,70 @@ class WeworkOperator {
             return false
         }
 
+        Log.i(TAG, "openChat: trying contacts-first path")
+        if (enterWeworkContactsPage()) {
+            Log.i(TAG, "openChat: contacts-first entered contacts page")
+            if (findContactInCurrentList(contactName, maxScrolls = 6)) {
+                Log.i(TAG, "openChat: contacts-first opened contact profile")
+                if (!enterChatFromContactProfile()) {
+                    Log.w(TAG, "contacts profile opened but chat page not ready")
+                }
+                Log.i(TAG, "openChat success via contacts-first: $contactName")
+                return isChatWindowReady()
+            }
+            Log.w(TAG, "openChat: contacts-first could not find contact=$contactName")
+            if (!goToMainPage(target)) {
+                Log.e(TAG, "openChat failed: unable to return to main page after contacts-first fallback")
+                return false
+            }
+            Thread.sleep(DELAY_SHORT)
+        } else {
+            Log.w(TAG, "openChat: contacts-first could not enter contacts page")
+        }
+
+        Log.i(TAG, "openChat: trying search path")
         if (openWeworkSearch()) {
             val inputOk = NodeHelper.inputToField(contactName, WeworkIds.SEARCH_INPUT) || NodeHelper.inputToField(contactName)
+            Log.i(TAG, "openChat: search path inputOk=$inputOk")
             if (inputOk) {
                 Thread.sleep(DELAY_LONG)
                 if (clickSearchResult(contactName)) {
+                    Log.i(TAG, "openChat: search path clicked search result")
                     if (!enterChatFromContactProfile()) {
                         Log.w(TAG, "search result opened but chat page not ready")
                     }
                     Log.i(TAG, "openChat success via search: $contactName")
                     return isChatWindowReady()
                 }
+                Log.w(TAG, "openChat: search path could not click result for $contactName")
             } else {
                 Log.w(TAG, "openChat search opened but input failed")
             }
             service?.pressBack()
             Thread.sleep(DELAY_SHORT)
+        } else {
+            Log.w(TAG, "openChat: search path could not be opened")
         }
 
+        if (!goToMainPage(target)) {
+            Log.e(TAG, "openChat failed: unable to return to main page before contacts fallback")
+            return false
+        }
+        Thread.sleep(DELAY_SHORT)
+
+        Log.i(TAG, "openChat: trying final contacts fallback")
         if (enterWeworkContactsPage()) {
-            val directNode = NodeHelper.scrollAndFindText(contactName, maxScrolls = 5)
-            if (directNode != null) {
-                service?.clickNode(directNode)
-                Thread.sleep(DELAY_PAGE_LOAD)
+            if (findContactInCurrentList(contactName, maxScrolls = 6)) {
+                Log.i(TAG, "openChat: final contacts fallback opened contact profile")
                 if (!enterChatFromContactProfile()) {
                     Log.w(TAG, "contacts profile opened but chat page not ready")
                 }
                 Log.i(TAG, "openChat success via contacts: $contactName")
                 return isChatWindowReady()
             }
+            Log.w(TAG, "openChat: final contacts fallback could not find contact=$contactName")
+        } else {
+            Log.w(TAG, "openChat: final contacts fallback could not enter contacts page")
         }
 
         Log.e(TAG, "openChat failed: $contactName")

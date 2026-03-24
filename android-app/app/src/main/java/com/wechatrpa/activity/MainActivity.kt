@@ -1,24 +1,20 @@
 package com.wechatrpa.activity
 
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.wechatrpa.R
 import com.wechatrpa.service.HttpServerService
 import com.wechatrpa.service.RpaAccessibilityService
 import java.util.Timer
 import java.util.TimerTask
 
-/**
- * 主界面
- *
- * 提供以下功能：
- * 1. 引导用户开启无障碍服务
- * 2. 启动/停止内嵌HTTP服务器
- * 3. 显示服务运行状态
- */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var tvStatus: TextView
@@ -32,135 +28,109 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 使用简单的线性布局（实际项目中应使用XML布局文件）
         setContentView(createLayout())
+        tryAutoStartHttpService()
     }
 
     override fun onResume() {
         super.onResume()
         startStatusRefresh()
-        // 无障碍已开启时自动启动 HTTP 服务，保证获取通讯录等操作时 RPA 在后台可连
         tryAutoStartHttpService()
     }
 
     override fun onPause() {
         super.onPause()
         statusTimer?.cancel()
+        statusTimer = null
     }
 
-    /**
-     * 创建简单的UI布局
-     */
-    private fun createLayout(): android.view.View {
-        val context = this
-        return android.widget.LinearLayout(context).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
+    private fun createLayout(): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
 
-            // 标题
             addView(TextView(context).apply {
-                text = "WeChat RPA 控制台"
+                text = getString(R.string.main_title)
                 textSize = 24f
-                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTypeface(null, Typeface.BOLD)
                 setPadding(0, 0, 0, 32)
             })
 
-            // 无障碍服务状态
             tvAccessibility = TextView(context).apply {
-                text = "无障碍服务: 未开启"
+                text = getString(R.string.accessibility_checking)
                 textSize = 16f
                 setPadding(0, 16, 0, 8)
             }
             addView(tvAccessibility)
 
-            // 开启无障碍服务按钮
             btnAccessibility = Button(context).apply {
-                text = "开启无障碍服务"
+                text = getString(R.string.open_accessibility_settings)
                 setOnClickListener {
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    startActivity(intent)
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
             }
             addView(btnAccessibility)
 
-            // HTTP服务器状态
             tvHttpServer = TextView(context).apply {
-                text = "HTTP服务器: 未启动"
+                text = getString(R.string.http_server_starting)
                 textSize = 16f
                 setPadding(0, 24, 0, 8)
             }
             addView(tvHttpServer)
 
-            // 启动HTTP服务器按钮
             btnHttpServer = Button(context).apply {
-                text = "启动HTTP服务器"
+                text = getString(R.string.restart_http_server)
                 setOnClickListener { toggleHttpServer() }
             }
             addView(btnHttpServer)
 
-            // 当前应用状态
             tvCurrentApp = TextView(context).apply {
-                text = "当前前台应用: -"
+                text = getString(R.string.current_package, "-")
                 textSize = 14f
                 setPadding(0, 24, 0, 8)
             }
             addView(tvCurrentApp)
 
-            // 总体状态
             tvStatus = TextView(context).apply {
-                text = "就绪"
+                text = getString(R.string.status_preparing)
                 textSize = 14f
                 setPadding(0, 24, 0, 0)
-                setTextColor(android.graphics.Color.GRAY)
+                setTextColor(Color.GRAY)
             }
             addView(tvStatus)
 
-            // 使用说明
             addView(TextView(context).apply {
-                text = "\n使用步骤:\n" +
-                    "1. 点击「开启无障碍服务」并在设置中启用\n" +
-                    "2. 返回本页后会自动启动 HTTP 服务（也可手动点击按钮）\n" +
-                    "3. 启动后可切到微信/后台，服务会持续运行，连接不断\n" +
-                    "4. 通过 http://<手机IP>:9527/api/ 或 PC 端服务调用 API\n" +
-                    "\n提示: 手机与调用端需在同一局域网"
+                text = getString(R.string.usage_text)
                 textSize = 13f
                 setPadding(0, 32, 0, 0)
-                setTextColor(android.graphics.Color.DKGRAY)
+                setTextColor(Color.DKGRAY)
             })
         }
     }
 
-    /**
-     * 无障碍已开启时自动启动 HTTP 服务，保证后台可连（获取通讯录等无需保持本应用前台）
-     */
     private fun tryAutoStartHttpService() {
-        if (RpaAccessibilityService.instance == null || httpServerRunning) return
+        if (httpServerRunning) return
         val intent = Intent(this, HttpServerService::class.java)
         startForegroundService(intent)
         httpServerRunning = true
-        btnHttpServer.text = "停止HTTP服务器"
+        btnHttpServer.text = getString(R.string.stop_http_server)
     }
 
-    /**
-     * 切换HTTP服务器状态
-     */
     private fun toggleHttpServer() {
         if (httpServerRunning) {
             stopService(Intent(this, HttpServerService::class.java))
             httpServerRunning = false
-            btnHttpServer.text = "启动HTTP服务器"
+            btnHttpServer.text = getString(R.string.start_http_server)
         } else {
             val intent = Intent(this, HttpServerService::class.java)
             startForegroundService(intent)
             httpServerRunning = true
-            btnHttpServer.text = "停止HTTP服务器"
+            btnHttpServer.text = getString(R.string.stop_http_server)
         }
     }
 
-    /**
-     * 定时刷新状态
-     */
     private fun startStatusRefresh() {
+        statusTimer?.cancel()
         statusTimer = Timer().apply {
             scheduleAtFixedRate(object : TimerTask() {
                 override fun run() {
@@ -172,27 +142,31 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateStatus() {
         val service = RpaAccessibilityService.instance
-        val isAccessibilityOn = service != null
-        if (isAccessibilityOn && !httpServerRunning) tryAutoStartHttpService()
+        val accessibilityOn = service != null
+        if (!httpServerRunning) {
+            tryAutoStartHttpService()
+        }
 
-        tvAccessibility.text = if (isAccessibilityOn) {
-            "无障碍服务: ✅ 已开启"
+        tvAccessibility.text = if (accessibilityOn) {
+            getString(R.string.accessibility_enabled)
         } else {
-            "无障碍服务: ❌ 未开启"
+            getString(R.string.accessibility_disabled)
         }
 
         tvHttpServer.text = if (httpServerRunning) {
-            "HTTP服务器: ✅ 运行中 (端口 9527)"
+            getString(R.string.http_server_running)
         } else {
-            "HTTP服务器: ⏹ 未启动"
+            getString(R.string.http_server_stopped)
         }
 
-        tvCurrentApp.text = "当前前台应用: ${service?.currentPackage ?: "-"}"
+        tvCurrentApp.text = getString(R.string.current_package, service?.currentPackage ?: "-")
 
-        tvStatus.text = if (isAccessibilityOn && httpServerRunning) {
-            "🟢 系统就绪，可以接收API指令"
+        tvStatus.text = if (accessibilityOn && httpServerRunning) {
+            getString(R.string.status_ready)
+        } else if (httpServerRunning) {
+            getString(R.string.status_wait_accessibility)
         } else {
-            "🔴 请先开启无障碍服务并启动HTTP服务器"
+            getString(R.string.status_wait_services)
         }
     }
 }
